@@ -54,10 +54,7 @@ translations = {
         'total': 'Total',
         'no_historical_data': 'No historical data available for',
         'error_fetching_data': 'Error fetching price data:',
-        'language': 'Language',
-        'theme': 'Theme',
-        'light_mode': 'Light Mode',
-        'dark_mode': 'Dark Mode'
+        'language': 'Language'
     },
     'zh_HK': {
         'page_title': '小型加密貨幣投資組合分析器',
@@ -100,37 +97,23 @@ translations = {
         'total': '總計',
         'no_historical_data': '沒有歷史數據可供查看：',
         'error_fetching_data': '獲取價格數據時出錯：',
-        'language': '語言',
-        'theme': '主題',
-        'light_mode': '淺色模式',
-        'dark_mode': '深色模式'
+        'language': '語言'
     }
 }
 
 st.set_page_config(page_title="Crypto Portfolio Analyzer", layout="wide")
 
-def get_theme_colors(theme_mode):
-    """Get color scheme based on theme mode"""
-    if theme_mode == 'dark':
-        return {
-            'bg_color': '#0E1117',
-            'paper_bg': '#262730',
-            'text_color': '#FAFAFA',
-            'grid_color': '#444444',
-            'line_color': '#00D4FF',  # Bright blue for dark mode
-            'positive_color': '#00FF88',  # Bright green
-            'negative_color': '#FF4B4B',  # Bright red
-        }
-    else:
-        return {
-            'bg_color': '#FFFFFF',
-            'paper_bg': '#FFFFFF',
-            'text_color': '#262730',
-            'grid_color': '#E0E0E0',
-            'line_color': '#1f77b4',  # Default blue
-            'positive_color': '#2E8B57',  # Dark green
-            'negative_color': '#DC143C',  # Dark red
-        }
+def get_theme_colors():
+    """Get dark mode color scheme"""
+    return {
+        'bg_color': '#0E1117',
+        'paper_bg': '#262730',
+        'text_color': '#FAFAFA',
+        'grid_color': '#444444',
+        'line_color': '#00D4FF',  # Bright blue for dark mode
+        'positive_color': '#00FF88',  # Bright green
+        'negative_color': '#FF4B4B',  # Bright red
+    }
 
 def apply_theme_to_fig(fig, theme_colors):
     """Apply theme colors to a plotly figure"""
@@ -363,58 +346,40 @@ def main():
     # Get translations for selected language
     t = translations[language]
     
-    # Theme selection in sidebar
-    theme_mode = st.sidebar.selectbox(
-        t['theme'],
-        options=['light', 'dark'],
-        format_func=lambda x: t['light_mode'] if x == 'light' else t['dark_mode']
-    )
-    
-    # Get theme colors
-    theme_colors = get_theme_colors(theme_mode)
+    # Get theme colors (dark mode only)
+    theme_colors = get_theme_colors()
     
     # Apply custom CSS for dark mode
-    if theme_mode == 'dark':
-        st.markdown("""
-        <style>
-        .stApp {
-            background-color: #0E1117;
-            color: #FAFAFA;
-        }
-        .stSidebar {
-            background-color: #262730;
-        }
-        .stMetric {
-            background-color: #262730;
-            padding: 10px;
-            border-radius: 5px;
-            border: 1px solid #444444;
-        }
-        .stDataFrame {
-            background-color: #262730;
-        }
-        .stSelectbox > div > div {
-            background-color: #262730;
-            color: #FAFAFA;
-        }
-        .stTabs [data-baseweb="tab-list"] {
-            background-color: #262730;
-        }
-        .stTabs [data-baseweb="tab"] {
-            color: #FAFAFA;
-        }
-        </style>
-        """, unsafe_allow_html=True)
-    else:
-        # Light mode (default Streamlit styling)
-        st.markdown("""
-        <style>
-        .stApp {
-            background-color: #FFFFFF;
-            color: #262730;
-        }
-        </style>
-        """, unsafe_allow_html=True)
+    st.markdown("""
+    <style>
+    .stApp {
+        background-color: #0E1117;
+        color: #FAFAFA;
+    }
+    .stSidebar {
+        background-color: #262730;
+    }
+    .stMetric {
+        background-color: #262730;
+        padding: 10px;
+        border-radius: 5px;
+        border: 1px solid #444444;
+    }
+    .stDataFrame {
+        background-color: #262730;
+    }
+    .stSelectbox > div > div {
+        background-color: #262730;
+        color: #FAFAFA;
+    }
+    .stTabs [data-baseweb="tab-list"] {
+        background-color: #262730;
+    }
+    .stTabs [data-baseweb="tab"] {
+        color: #FAFAFA;
+    }
+    </style>
+    """, unsafe_allow_html=True)
     
     # Load data
     df = load_transaction_data()
