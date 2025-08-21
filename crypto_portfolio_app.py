@@ -499,70 +499,89 @@ def main():
         # Portfolio value over time calculation
         st.header(t['portfolio_value_over_time'])
         
-        # Get historical prices for all assets
-        df_sorted = df.sort_values('Timestamp')
-        start_date = df_sorted['Timestamp'].min().strftime('%Y-%m-%d')
-        end_date = df_sorted['Timestamp'].max().strftime('%Y-%m-%d')
+        # Asset filter for portfolio value over time
+        portfolio_asset_filter = st.multiselect(
+            t['filter_by_asset'],
+            options=assets,
+            default=assets,
+            key="portfolio_value_asset_filter"
+        )
         
-        with st.spinner("Fetching historical price data..."):
-            historical_prices = get_historical_prices(assets, start_date, end_date)
-        
-        # Calculate cumulative portfolio value using historical prices
-        portfolio_values = []
-        running_holdings = {}
-        
-        for _, row in df_sorted.iterrows():
-            asset = row['Asset']
-            quantity = row['Quantity Transacted']
-            transaction_date = row['Timestamp'].date()
+        if not portfolio_asset_filter:
+            st.warning("Please select at least one asset to display portfolio value over time.")
+        else:
+            # Get historical prices for all assets
+            df_sorted = df.sort_values('Timestamp')
+            start_date = df_sorted['Timestamp'].min().strftime('%Y-%m-%d')
+            end_date = df_sorted['Timestamp'].max().strftime('%Y-%m-%d')
             
-            if 'Sell' in row['Transaction Type']:
-                quantity = -abs(quantity)
+            with st.spinner("Fetching historical price data..."):
+                historical_prices = get_historical_prices(assets, start_date, end_date)
             
-            if asset not in running_holdings:
-                running_holdings[asset] = 0
-            running_holdings[asset] += quantity
+            # Calculate cumulative portfolio value using historical prices
+            portfolio_values = []
+            running_holdings = {}
             
-            # Calculate portfolio value at this point in time using historical prices
-            total_value = 0
-            for held_asset, held_quantity in running_holdings.items():
-                if held_quantity > 0:
-                    # Try to get historical price for this date
-                    if held_asset in historical_prices and len(historical_prices[held_asset]) > 0:
-                        # Find the closest price date
-                        price_series = historical_prices[held_asset]
-                        if transaction_date in price_series.index:
-                            price = price_series[transaction_date]
-                        else:
-                            # Find the closest available price
-                            available_dates = price_series.index
-                            if len(available_dates) > 0:
-                                closest_date = min(available_dates, key=lambda x: abs((x - transaction_date).days))
-                                price = price_series[closest_date]
+            for _, row in df_sorted.iterrows():
+                asset = row['Asset']
+                quantity = row['Quantity Transacted']
+                transaction_date = row['Timestamp'].date()
+                
+                if 'Sell' in row['Transaction Type']:
+                    quantity = -abs(quantity)
+                
+                if asset not in running_holdings:
+                    running_holdings[asset] = 0
+                running_holdings[asset] += quantity
+                
+                # Calculate portfolio value at this point in time using historical prices
+                total_value = 0
+                for held_asset, held_quantity in running_holdings.items():
+                    # Only include assets selected in the filter
+                    if held_asset in portfolio_asset_filter and held_quantity > 0:
+                        # Try to get historical price for this date
+                        if held_asset in historical_prices and len(historical_prices[held_asset]) > 0:
+                            # Find the closest price date
+                            price_series = historical_prices[held_asset]
+                            if transaction_date in price_series.index:
+                                price = price_series[transaction_date]
                             else:
-                                price = current_prices.get(held_asset, 0)  # Fallback to current price
-                    else:
-                        price = current_prices.get(held_asset, 0)  # Fallback to current price
-                    
-                    total_value += held_quantity * price
+                                # Find the closest available price
+                                available_dates = price_series.index
+                                if len(available_dates) > 0:
+                                    closest_date = min(available_dates, key=lambda x: abs((x - transaction_date).days))
+                                    price = price_series[closest_date]
+                                else:
+                                    price = current_prices.get(held_asset, 0)  # Fallback to current price
+                        else:
+                            price = current_prices.get(held_asset, 0)  # Fallback to current price
+                        
+                        total_value += held_quantity * price
+                
+                portfolio_values.append({
+                    t['date']: row['Timestamp'],
+                    t['portfolio_value_over_time']: total_value
+                })
             
-            portfolio_values.append({
-                t['date']: row['Timestamp'],
-                t['portfolio_value_over_time']: total_value
-            })
-        
-        if portfolio_values:
-            portfolio_df = pd.DataFrame(portfolio_values)
-            
-            fig_portfolio = px.line(portfolio_df, x=t['date'], y=t['portfolio_value_over_time'],
-                                  title=t['portfolio_value_over_time'])
-            fig_portfolio.update_layout(
-                xaxis_title=t['date'],
-                yaxis_title=f"{t['portfolio_value_over_time']} (USD)"
-            )
-            fig_portfolio.update_traces(line_color=theme_colors['line_color'])
-            fig_portfolio = apply_theme_to_fig(fig_portfolio, theme_colors)
-            st.plotly_chart(fig_portfolio, use_container_width=True)
+            if portfolio_values:
+                portfolio_df = pd.DataFrame(portfolio_values)
+                
+                # Update chart title based on selected assets
+                if len(portfolio_asset_filter) == len(assets):
+                    chart_title = t['portfolio_value_over_time']
+                else:
+                    filtered_assets = ", ".join(portfolio_asset_filter) if portfolio_asset_filter else "None"
+                    chart_title = f"{t['portfolio_value_over_time']} ({filtered_assets})"
+                
+                fig_portfolio = px.line(portfolio_df, x=t['date'], y=t['portfolio_value_over_time'],
+                                      title=chart_title)
+                fig_portfolio.update_layout(
+                    xaxis_title=t['date'],
+                    yaxis_title=f"{t['portfolio_value_over_time']} (USD)"
+                )
+                fig_portfolio.update_traces(line_color=theme_colors['line_color'])
+                fig_portfolio = apply_theme_to_fig(fig_portfolio, theme_colors)
+                st.plotly_chart(fig_portfolio, use_container_width=True)
     
     with tab2:
         st.header(t['detailed_asset_analysis'])
@@ -597,20 +616,80 @@ def main():
         st.header(t['asset_price_charts'])
         
         # Get historical price data for visualization
-        selected_chart_asset = st.selectbox(t['select_asset_chart'], 
-                                          [asset for asset in assets if asset != 'USDC'])
+        selected_chart_asset = st.selectbox(t['select_asset_chart'], assets)
         
         if selected_chart_asset:
             ticker_map = {
                 'BTC': 'BTC-USD',
                 'SOL': 'SOL-USD',
                 'LINK': 'LINK-USD',
+                'USDC': 'USDC-USD',
                 'ETH': 'ETH-USD',
                 'ADA': 'ADA-USD',
                 'DOT': 'DOT-USD'
             }
             
-            if selected_chart_asset in ticker_map:
+            if selected_chart_asset == 'USDC':
+                # Handle USDC as a stablecoin - show flat line at $1.00
+                asset_transactions = holdings[selected_chart_asset]['transactions']
+                if asset_transactions:
+                    earliest_date = min(tx['date'] for tx in asset_transactions)
+                    # Convert to date-only (removes timezone and time info)
+                    start_date = pd.to_datetime(earliest_date.date()) - pd.Timedelta(days=30)
+                    end_date = pd.to_datetime(pd.Timestamp.now().date())
+                else:
+                    # Fallback to 2 years if no transactions found
+                    end_date = pd.to_datetime(pd.Timestamp.now().date())
+                    start_date = end_date - pd.Timedelta(days=730)
+                
+                # Create date range for USDC $1.00 line
+                date_range = pd.date_range(start=start_date, end=end_date, freq='D')
+                
+                fig_price = go.Figure()
+                fig_price.add_trace(go.Scatter(
+                    x=date_range, 
+                    y=[1.0] * len(date_range),
+                    mode='lines',
+                    name=f'{selected_chart_asset} Price',
+                    line=dict(color=theme_colors['line_color'])
+                ))
+                
+                # Add transaction points
+                asset_txs = holdings[selected_chart_asset]['transactions']
+                buy_dates = [tx['date'] for tx in asset_txs if tx['quantity'] > 0]
+                buy_prices = [tx['price'] for tx in asset_txs if tx['quantity'] > 0]
+                sell_dates = [tx['date'] for tx in asset_txs if tx['quantity'] < 0]
+                sell_prices = [tx['price'] for tx in asset_txs if tx['quantity'] < 0]
+                
+                if buy_dates:
+                    fig_price.add_trace(go.Scatter(
+                        x=buy_dates, y=buy_prices,
+                        mode='markers',
+                        name=t['buy_transactions'],
+                        marker=dict(color=theme_colors['positive_color'], size=12, symbol='triangle-up', 
+                                  line=dict(width=2, color='darkgreen'))
+                    ))
+                
+                if sell_dates:
+                    fig_price.add_trace(go.Scatter(
+                        x=sell_dates, y=sell_prices,
+                        mode='markers',
+                        name=t['sell_transactions'],
+                        marker=dict(color=theme_colors['negative_color'], size=12, symbol='triangle-down', 
+                                  line=dict(width=2, color='darkred'))
+                    ))
+                
+                fig_price.update_layout(
+                    title=f'{selected_chart_asset} {t["price_over_time"]}',
+                    xaxis_title=t['date'],
+                    yaxis_title=f'{t["price"]} (USD)',
+                    hovermode='x unified'
+                )
+                
+                fig_price = apply_theme_to_fig(fig_price, theme_colors)
+                st.plotly_chart(fig_price, use_container_width=True)
+                
+            elif selected_chart_asset in ticker_map:
                 try:
                     ticker = yf.Ticker(ticker_map[selected_chart_asset])
                     
@@ -674,6 +753,9 @@ def main():
                         
                 except Exception as e:
                     st.error(f"{t['error_fetching_data']} {e}")
+            else:
+                # Handle assets not in ticker_map
+                st.warning(f"Price chart not available for {selected_chart_asset}. This asset may not be supported by yfinance.")
     
     with tab4:
         st.header(t['complete_transaction_history'])
