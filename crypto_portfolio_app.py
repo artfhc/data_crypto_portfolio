@@ -8,6 +8,7 @@ import yfinance as yf
 from pathlib import Path
 import os
 from dotenv import load_dotenv
+import requests
 
 load_dotenv()
 
@@ -219,10 +220,32 @@ def get_historical_prices(assets, start_date, end_date=None):
 
 @st.cache_data
 def get_current_prices(assets):
-    """Get current prices for assets using yfinance"""
+    """Get current prices for assets using cryptoprices.cc API"""
     current_prices = {}
     
-    # Mapping of crypto symbols to Yahoo Finance tickers
+    for asset in assets:
+        if asset == 'USDC':
+            # USDC is a stablecoin, always $1
+            current_prices[asset] = 1.0
+        else:
+            try:
+                # Fetch from cryptoprices.cc API
+                response = requests.get(f"https://cryptoprices.cc/{asset}", timeout=10)
+                if response.status_code == 200:
+                    price = float(response.text.strip())
+                    current_prices[asset] = price
+                else:
+                    # Fallback to yfinance if cryptoprices.cc fails
+                    current_prices[asset] = get_fallback_price(asset)
+            except Exception as e:
+                st.warning(f"Failed to fetch price for {asset} from cryptoprices.cc: {e}")
+                # Fallback to yfinance
+                current_prices[asset] = get_fallback_price(asset)
+    
+    return current_prices
+
+def get_fallback_price(asset):
+    """Fallback price fetching using yfinance"""
     ticker_map = {
         'BTC': 'BTC-USD',
         'SOL': 'SOL-USD',
@@ -233,21 +256,16 @@ def get_current_prices(assets):
         'DOT': 'DOT-USD'
     }
     
-    for asset in assets:
-        if asset in ticker_map:
-            try:
-                ticker = yf.Ticker(ticker_map[asset])
-                hist = ticker.history(period='1d')
-                if not hist.empty:
-                    current_prices[asset] = hist['Close'].iloc[-1]
-                else:
-                    current_prices[asset] = 1.0 if asset == 'USDC' else 0.0
-            except:
-                current_prices[asset] = 1.0 if asset == 'USDC' else 0.0
-        else:
-            current_prices[asset] = 1.0 if asset == 'USDC' else 0.0
+    if asset in ticker_map:
+        try:
+            ticker = yf.Ticker(ticker_map[asset])
+            hist = ticker.history(period='1d')
+            if not hist.empty:
+                return hist['Close'].iloc[-1]
+        except:
+            pass
     
-    return current_prices
+    return 1.0 if asset == 'USDC' else 0.0
 
 def calculate_portfolio_holdings(df):
     """Calculate current holdings for each asset"""
